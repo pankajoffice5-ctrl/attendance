@@ -11,7 +11,8 @@
     <div id="login-screen" class="fixed inset-0 bg-slate-900 z-50 flex items-center justify-center p-6 text-center">
         <div class="bg-white p-8 rounded-3xl max-w-sm w-full shadow-2xl">
             <h2 class="text-3xl font-black mb-2 text-slate-800">Attendance Log</h2>
-            <button id="login-btn" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 transition-all">Sign in with Google</button>
+            <p class="text-slate-500 text-sm mb-6">Sign in to manage your hours</p>
+            <button id="login-btn" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200">Sign in with Google</button>
         </div>
     </div>
 
@@ -69,16 +70,18 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         
-        // FIXED: Timestamp must be imported from the firestore module to fix the SyntaxError
+        // IMPORTANT: Timestamp must be imported from the firestore module
         import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy, where, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+        // Your NEW Firebase Config
         const firebaseConfig = {
-            apiKey: "AIzaSyCDd-I_OFsCNreuUVbtfUFK-2IDGkhqHAE",
-            authDomain: "expanse-trac-e3e40.firebaseapp.com",
-            projectId: "expanse-trac-e3e40",
-            storageBucket: "expanse-trac-e3e40.firebasestorage.app",
-            messagingSenderId: "716119679836",
-            appId: "1:716119679836:web:6b4531be1aa9e41e5d1799"
+            apiKey: "AIzaSyBMELRrwK58YRCHFtz-L4rzrHr_k4ICDrw",
+            authDomain: "attendance-6ea02.firebaseapp.com",
+            projectId: "attendance-6ea02",
+            storageBucket: "attendance-6ea02.firebasestorage.app",
+            messagingSenderId: "307041989876",
+            appId: "1:307041989876:web:67b23bb867710ecb985aa1",
+            measurementId: "G-Z3E5TL695Q"
         };
 
         const app = initializeApp(firebaseConfig);
@@ -89,12 +92,12 @@
         let currentUser = null;
         let loggedDates = [];
 
-        // UI Logic for OT display
+        // Toggle OT input visibility
         document.getElementById('status').addEventListener('change', (e) => {
             document.getElementById('ot-container').style.display = (e.target.value === 'Present') ? 'flex' : 'none';
         });
 
-        // Authentication State
+        // Auth State Observer
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 currentUser = user;
@@ -108,9 +111,8 @@
             }
         });
 
-        // Load Data from Firestore
         function loadData(uid) {
-            // Requires composite index: userId (Ascending), date (Descending)
+            // NOTE: This query requires a Firestore Composite Index: userId (Asc) + date (Desc)
             const q = query(collection(db, 'attendance'), where("userId", "==", uid), orderBy('date', 'desc'));
             
             onSnapshot(q, (snapshot) => {
@@ -126,7 +128,7 @@
 
                     const ot = parseFloat(data.otHours) || 0;
                     
-                    // Stats Calculation
+                    // Monthly stats logic
                     if (date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()) {
                         if(data.status === 'Present') stats.curP++;
                         stats.curOT += ot;
@@ -136,38 +138,37 @@
                         stats.m2OT += ot;
                     }
 
-                    // Item HTML
                     html += `
                         <div class="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100">
                             <div class="flex items-center gap-3">
                                 <div class="bg-slate-100 text-[9px] font-bold p-2 rounded-lg text-slate-500 text-center uppercase">
                                     ${date.toLocaleDateString('en-GB', {day:'2-digit', month:'short'}).replace(' ', '<br>')}
                                 </div>
-                                <p class="text-sm font-bold ${data.status === 'Present' ? 'text-green-600' : 'text-red-500'}">
-                                    ${data.status} ${ot > 0 ? `(+${ot} hrs)` : ''}
-                                </p>
+                                <p class="text-sm font-bold ${data.status === 'Present' ? 'text-green-600' : 'text-red-500'}">${data.status} ${ot > 0 ? `(+${ot} hrs)` : ''}</p>
                             </div>
-                            <button onclick="deleteAtt('${doc.id}')" class="text-slate-200 hover:text-red-500">✕</button>
+                            <button onclick="deleteAtt('${doc.id}')" class="text-slate-200 hover:text-red-500 transition-colors">✕</button>
                         </div>`;
                 });
 
-                // Update UI
                 document.getElementById('attendance-list').innerHTML = html;
                 document.getElementById('present-count').innerText = stats.curP;
                 document.getElementById('current-ot-total').innerText = stats.curOT + " hrs";
                 document.getElementById('m1-ot').innerText = stats.m1OT;
                 document.getElementById('m2-ot').innerText = stats.m2OT;
 
+                // Set month names
                 const d1 = new Date(); d1.setMonth(now.getMonth() - 1);
                 const d2 = new Date(); d2.setMonth(now.getMonth() - 2);
                 document.getElementById('m1-name').innerText = d1.toLocaleString('default', { month: 'short' });
                 document.getElementById('m2-name').innerText = d2.toLocaleString('default', { month: 'short' });
             }, (error) => {
-                console.error("Firebase Error:", error.message);
+                console.error("Query Error:", error.message);
+                if (error.message.includes("index")) {
+                    console.log("Create index here:", error.message);
+                }
             });
         }
 
-        // Add New Entry
         document.getElementById('attendance-form').onsubmit = async (e) => {
             e.preventDefault();
             const dateInput = document.getElementById('att-date').value;
@@ -178,7 +179,6 @@
             }
 
             try {
-                // Ensure field names match your database logic
                 await addDoc(collection(db, 'attendance'), {
                     userId: currentUser.uid,
                     date: Timestamp.fromDate(new Date(dateInput)),
@@ -187,24 +187,20 @@
                     createdAt: Timestamp.now()
                 });
                 
-                // Success - Reset form correctly
                 e.target.reset();
                 document.getElementById('att-date').valueAsDate = new Date();
                 document.getElementById('status').value = 'Present';
                 document.getElementById('ot-container').style.display = 'flex';
                 
             } catch (err) {
-                // This triggers if rules aren't published
-                alert("Error saving entry. Ensure your Firestore Rules are Published!");
-                console.error(err);
+                alert("Check Firebase Rules & Index! Error: " + err.code);
             }
         };
 
-        // Global functions
         window.deleteAtt = async (id) => { 
-            if(confirm("Delete this entry?")) await deleteDoc(doc(db, 'attendance', id)); 
+            if(confirm("Delete this log?")) await deleteDoc(doc(db, 'attendance', id)); 
         };
-        
+
         document.getElementById('login-btn').onclick = () => signInWithPopup(auth, provider);
         document.getElementById('logout-btn').onclick = () => signOut(auth);
     </script>
